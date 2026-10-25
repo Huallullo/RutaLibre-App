@@ -5,20 +5,18 @@ import {
   Bus, 
   Users, 
   Calendar, 
-  MapPin, 
   DollarSign, 
-  CheckCircle2, 
-  AlertCircle, 
   Copy, 
   Check, 
   Plus, 
   Trash2, 
-  Sparkles, 
   Send, 
   Clock, 
-  ShieldCheck,
   TrendingUp,
-  Tag
+  X,
+  MessageSquare,
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react';
 
 import { PricingEngine } from '@/domain/pricing-engine';
@@ -32,7 +30,6 @@ import {
   CotizacionReservaInput 
 } from '@/domain/types';
 
-// Mock Data de Salidas Iniciales de la Agencia
 interface ExpedicionMock {
   id: string;
   codigo: string;
@@ -114,7 +111,11 @@ export default function DashboardPage() {
   const [expediciones, setExpediciones] = useState<ExpedicionMock[]>(EXPEDICIONES_INICIALES);
   const [salidaSeleccionadaId, setSalidaSeleccionadaId] = useState<string>('exp-1');
   const [copiado, setCopiado] = useState(false);
-  const [mensajeVoucher, setMensajeVoucher] = useState('');
+
+  // Estados del Modal de Confirmación WhatsApp
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [textoVoucher, setTextoVoucher] = useState('');
+  const [enlaceWhatsAppDirecto, setEnlaceWhatsAppDirecto] = useState('');
 
   // Formulario de Reserva
   const [titularNombre, setTitularNombre] = useState('Juan Carlos Flores');
@@ -147,7 +148,6 @@ export default function DashboardPage() {
 
   const salidaActiva = expediciones.find((e) => e.id === salidaSeleccionadaId) || expediciones[0]!;
 
-  // Evaluar Aforo con el Motor de Dominio
   const estadoAforo = useMemo(() => {
     return CapacityEngine.evaluarAforo(
       salidaActiva.capacidadTotal,
@@ -156,7 +156,6 @@ export default function DashboardPage() {
     );
   }, [salidaActiva]);
 
-  // Cotización Dinámica con el Motor de Precios
   const cotizacion = useMemo(() => {
     const tarifas: TourTarifas = {
       precioBaseRegular: salidaActiva.precioBase,
@@ -183,7 +182,6 @@ export default function DashboardPage() {
     }
   }, [salidaActiva, pasajeros, cuponCodigo]);
 
-  // Manejador para agregar pasajero
   const agregarPasajero = () => {
     setPasajeros([
       ...pasajeros,
@@ -199,13 +197,11 @@ export default function DashboardPage() {
     ]);
   };
 
-  // Manejador para quitar pasajero
   const quitarPasajero = (index: number) => {
     if (pasajeros.length <= 1) return;
     setPasajeros(pasajeros.filter((_, i) => i !== index));
   };
 
-  // Toggle de adicionales por pasajero
   const toggleAdicional = (pasajeroIndex: number, adicionalId: string) => {
     const actualizados = [...pasajeros];
     const p = actualizados[pasajeroIndex];
@@ -220,15 +216,21 @@ export default function DashboardPage() {
     setPasajeros(actualizados);
   };
 
-  // Confirmar y Generar Voucher WhatsApp
-  const handleGenerarVoucher = () => {
+  // Abrir Modal de Confirmación y Revisión Previa
+  const handleAbrirRevisionVoucher = () => {
     if (!cotizacion) return;
 
     try {
-      // Validar cada pasajero normativamente
+      // 1. Validar a cada pasajero
       pasajeros.forEach((p) => PassengerValidator.validarPasajero(p));
 
-      // Validar aforo
+      // 2. Validar que el celular del titular sea válido
+      if (!PassengerValidator.validarTelefono(titularTelefono)) {
+        alert('Por favor ingresa un número de celular de WhatsApp válido para el titular.');
+        return;
+      }
+
+      // 3. Validar aforo
       CapacityEngine.validarReservaEntrante(
         salidaActiva.capacidadTotal,
         salidaActiva.asientosOcupados,
@@ -238,6 +240,7 @@ export default function DashboardPage() {
       const paraderoNombre = PARADEROS.find((p) => p.id === paraderoPrincipal)?.nombre || paraderoPrincipal;
       const saldoPendiente = Math.max(0, cotizacion.montoTotal - montoAdelanto);
 
+      // Generar mensaje
       const texto = VoucherGenerator.generarMensajeWhatsApp({
         codigoReserva: `RL-${Math.floor(1000 + Math.random() * 9000)}`,
         codigoExpedicion: salidaActiva.codigo,
@@ -252,12 +255,21 @@ export default function DashboardPage() {
         puntoEmbarquePrincipal: paraderoNombre,
       });
 
-      setMensajeVoucher(texto);
-      navigator.clipboard.writeText(texto);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 3500);
+      // Generar enlace directo https://wa.me/
+      const enlace = VoucherGenerator.generarEnlaceWhatsApp(titularTelefono, texto);
 
-      // Simular reserva ocupando asientos en el panel
+      setTextoVoucher(texto);
+      setEnlaceWhatsAppDirecto(enlace);
+      setModalAbierto(true);
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
+  // Enviar Directo a WhatsApp
+  const handleEnviarDirectoWhatsApp = () => {
+    // Descontar asientos en el semáforo
+    if (cotizacion) {
       setExpediciones((prev) =>
         prev.map((e) =>
           e.id === salidaActiva.id
@@ -265,9 +277,18 @@ export default function DashboardPage() {
             : e
         )
       );
-    } catch (err) {
-      alert((err as Error).message);
     }
+
+    // Abrir WhatsApp Web o App en una nueva pestaña
+    window.open(enlaceWhatsAppDirecto, '_blank');
+    setModalAbierto(false);
+  };
+
+  // Copiar al portapapeles desde el modal
+  const handleCopiarPortapapeles = () => {
+    navigator.clipboard.writeText(textoVoucher);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 3000);
   };
 
   return (
@@ -393,7 +414,6 @@ export default function DashboardPage() {
                   <h3 className="font-bold text-slate-900 text-sm mb-1 leading-snug">{exp.tourNombre}</h3>
                   <p className="text-xs text-slate-500 mb-4">{exp.fecha} • Concentración {exp.horaEmbarque}</p>
 
-                  {/* Barra de Progreso de Asientos */}
                   <div className="space-y-1 mb-4">
                     <div className="flex justify-between text-xs font-semibold">
                       <span className="text-slate-600">Aforo: {exp.asientosOcupados}/{exp.capacidadTotal} asientos</span>
@@ -565,7 +585,6 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Selector de Adicionales para este pasajero */}
                   <div className="pt-2 border-t border-slate-100">
                     <span className="text-[11px] font-semibold text-slate-600 block mb-1.5">
                       Adicionales para este pasajero:
@@ -595,7 +614,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Columna Derecha: Resumen de Cuenta y Generador de Voucher */}
+          {/* Columna Derecha: Resumen de Cuenta y Botón de Revisión */}
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -622,7 +641,6 @@ export default function DashboardPage() {
                     </div>
                   )}
 
-                  {/* Cupón Promocional Input */}
                   <div className="pt-2">
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">¿Tienes un cupón de TikTok/Campaña?</label>
                     <div className="flex gap-2">
@@ -642,7 +660,6 @@ export default function DashboardPage() {
                     <span className="text-base text-emerald-700">S/ {cotizacion.montoTotal.toFixed(2)}</span>
                   </div>
 
-                  {/* Adelanto y Saldo en Bus */}
                   <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 mt-4">
                     <div className="flex justify-between items-center">
                       <label className="text-xs font-semibold text-slate-700">Adelanto por Yape / Plin:</label>
@@ -662,48 +679,124 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Botón Principal Generador de Voucher */}
+                  {/* Botón que Abre la Revisión Previa al Envío */}
                   <button
                     type="button"
-                    onClick={handleGenerarVoucher}
-                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-md mt-4 text-xs tracking-wide"
+                    onClick={handleAbrirRevisionVoucher}
+                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl transition-all shadow-md mt-4 text-xs tracking-wide"
                   >
-                    {copiado ? (
-                      <>
-                        <Check className="w-4 h-4" /> ¡VOUCHER COPIADO AL PORTAPAPELES!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4" /> GENERAR Y COPIAR VOUCHER PARA WHATSAPP
-                      </>
-                    )}
+                    <MessageSquare className="w-4 h-4" /> REVISAR Y ENVIAR VOUCHER A WHATSAPP
                   </button>
                   <p className="text-[10px] text-center text-slate-400">
-                    Al hacer clic, se descuentan los cupos y el texto formal queda listo para pegar en el chat del cliente.
+                    Se abrirá una ventana para que revises todo el texto antes de enviarlo directamente al celular del cliente.
                   </p>
                 </div>
               ) : (
                 <p className="text-xs text-red-500">Error en el cálculo de tarifas.</p>
               )}
             </div>
-
-            {/* Vista Previa del Voucher Generado */}
-            {mensajeVoucher && (
-              <div className="bg-slate-900 text-emerald-400 p-4 rounded-2xl shadow-lg border border-slate-800 text-xs font-mono space-y-2">
-                <div className="flex items-center justify-between text-slate-400 border-b border-slate-800 pb-2">
-                  <span className="text-[11px] font-sans font-bold flex items-center gap-1.5">
-                    <Send className="w-3.5 h-3.5 text-emerald-400" /> Vista Previa WhatsApp
-                  </span>
-                  <span className="text-[10px]">Listo para enviar</span>
-                </div>
-                <pre className="whitespace-pre-wrap font-sans text-xs text-slate-200 max-h-60 overflow-y-auto leading-relaxed">
-                  {mensajeVoucher}
-                </pre>
-              </div>
-            )}
           </div>
         </div>
       </main>
+
+      {/* MODAL DE CONFIRMACIÓN Y REVISIÓN PREVIA DEL VOUCHER */}
+      {modalAbierto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Header del Modal */}
+            <div className="bg-emerald-600 text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-white/20 p-2 rounded-xl">
+                  <Send className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Confirmar Envío por WhatsApp</h3>
+                  <p className="text-xs text-emerald-100">Revisa la redacción y los saldos antes de enviar al cliente</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalAbierto(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Contenido del Modal */}
+            <div className="p-6 overflow-y-auto space-y-4">
+              {/* Resumen del Destinatario */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider block">Destinatario (Titular):</span>
+                  <span className="text-sm font-bold text-slate-900">{titularNombre}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider block">WhatsApp:</span>
+                  <span className="text-sm font-mono font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-md border border-emerald-300">
+                    +51 {titularTelefono}
+                  </span>
+                </div>
+              </div>
+
+              {/* Vista Previa del Mensaje Exacto */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>Mensaje que recibirá el cliente:</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Puedes editar el texto si deseas agregar una nota</span>
+                </label>
+                <textarea
+                  value={textoVoucher}
+                  onChange={(e) => {
+                    setTextoVoucher(e.target.value);
+                    setEnlaceWhatsAppDirecto(VoucherGenerator.generarEnlaceWhatsApp(titularTelefono, e.target.value));
+                  }}
+                  rows={10}
+                  className="w-full text-xs font-mono p-3 bg-slate-900 text-emerald-300 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800 text-xs">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Al presionar <strong>Enviar a WhatsApp</strong>, se abrirá el chat oficial con el cliente y los asientos quedarán reservados en el sistema.
+                </span>
+              </div>
+            </div>
+
+            {/* Footer con Acciones */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleCopiarPortapapeles}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 px-4 py-2.5 rounded-xl transition-colors"
+              >
+                {copiado ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                {copiado ? '¡Copiado!' : 'Solo Copiar Texto'}
+              </button>
+
+              <div className="w-full sm:w-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalAbierto(false)}
+                  className="w-1/2 sm:w-auto text-xs font-bold text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl transition-colors"
+                >
+                  Modificar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEnviarDirectoWhatsApp}
+                  className="w-1/2 sm:w-auto inline-flex items-center justify-center gap-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 rounded-xl transition-all shadow-md"
+                >
+                  <ExternalLink className="w-4 h-4" /> Enviar a WhatsApp
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * Generador de Vouchers y Mensajes de Confirmación para WhatsApp
+ * Generador de Vouchers y Enlaces de Envío Directo a WhatsApp
  * Ruta Libre Perú - Capa de Dominio
  */
 
@@ -9,8 +9,8 @@ export interface DatosVoucherReserva {
   codigoReserva: string;
   codigoExpedicion: string;
   nombreTour: string;
-  fechaSalida: string; // Ej: 'Sábado 02 de Noviembre'
-  horaConcentracion: string; // Ej: '04:15 AM'
+  fechaSalida: string;
+  horaConcentracion: string;
   titularNombre: string;
   titularTelefono: string;
   cotizacion: ResultadoCotizacion;
@@ -21,7 +21,7 @@ export interface DatosVoucherReserva {
 
 export class VoucherGenerator {
   /**
-   * Genera el texto formal y optimizado para enviar al cliente por WhatsApp en 1 clic.
+   * Genera el texto formal y optimizado para enviar al cliente por WhatsApp.
    */
   public static generarMensajeWhatsApp(datos: DatosVoucherReserva): string {
     const {
@@ -72,5 +72,22 @@ export class VoucherGenerator {
     lineas.push(`¡Gracias por viajar con nosotros! Nos vemos en la ruta. 🚌🏔️`);
 
     return lineas.join('\n');
+  }
+
+  /**
+   * Sanitiza el número de teléfono (asumiendo Perú +51 por defecto si son 9 dígitos)
+   * y genera la URL oficial para abrir WhatsApp Web / WhatsApp App con el mensaje listo.
+   */
+  public static generarEnlaceWhatsApp(telefono: string, mensaje: string): string {
+    const soloDigitos = telefono.replace(/\D/g, '');
+
+    let numeroInternacional = soloDigitos;
+    // Si tiene 9 dígitos (formato estándar peruano 9XXXXXXXX), anteponer código país 51
+    if (soloDigitos.length === 9 && soloDigitos.startsWith('9')) {
+      numeroInternacional = `51${soloDigitos}`;
+    }
+
+    const textoCodificado = encodeURIComponent(mensaje);
+    return `https://wa.me/${numeroInternacional}?text=${textoCodificado}`;
   }
 }
