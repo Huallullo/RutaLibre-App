@@ -68,4 +68,16 @@ describe('QA Suite - Generador de Vouchers para WhatsApp (VoucherGenerator)', ()
     const enlaceConCodigo = VoucherGenerator.generarEnlaceWhatsApp('+51 987 654 321', mensaje);
     expect(enlaceConCodigo).toBe('https://wa.me/51987654321?text=Hola%20Carlos');
   });
+
+  it('debe incluir butacas asignadas y croquis GPS si están disponibles', () => {
+    const datosConAsientos: DatosVoucherReserva = {
+      ...datos,
+      asientosAsignados: [3, 4],
+      enlaceUbicacionMaps: 'https://maps.app.goo.gl/plazanorte',
+    };
+
+    const mensaje = VoucherGenerator.generarMensajeWhatsApp(datosConAsientos);
+    expect(mensaje).toContain('*Butacas Asignadas:* #03, #04');
+    expect(mensaje).toContain('*Croquis / GPS Paradero:* https://maps.app.goo.gl/plazanorte');
+  });
 });

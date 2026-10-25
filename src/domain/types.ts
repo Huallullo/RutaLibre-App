@@ -19,6 +19,7 @@ export interface PasajeroInput {
   numeroDocumento: string;
   edad: number;
   paraderoEmbarqueId: string;
+  asientoNumero?: number;
   tipoHabitacion?: TipoHabitacion;
   condicionesMedicas?: string;
   contactoEmergenciaNombre?: string;
@@ -94,3 +95,27 @@ export interface EstadoAforo {
   alcanzoBreakEven: boolean;
   semaforo: 'DISPONIBLE' | 'ULTIMOS_CUPOS' | 'LLENO';
 }
+
+export type TipoSolicitudTC = 
+  | 'GASTO_EMERGENCIA' 
+  | 'ABORDAJE_ESPECIAL' 
+  | 'DESCUENTO_EXCEPCION'
+  | 'REASIGNACION_ASIENTO';
+
+export type EstadoSolicitudTC = 'PENDIENTE' | 'APROBADO' | 'RECHAZADO';
+
+export interface SolicitudAprobacionTC {
+  id: string;
+  expedicionId: string;
+  codigoExpedicion: string;
+  solicitanteTC: string;
+  tipoSolicitud: TipoSolicitudTC;
+  titulo: string;
+  monto?: number;
+  descripcion: string;
+  estado: EstadoSolicitudTC;
+  creadoEn: string;
+  autorizadoPor?: string;
+  observacionAdmin?: string;
+}
+

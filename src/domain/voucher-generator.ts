@@ -17,6 +17,8 @@ export interface DatosVoucherReserva {
   montoAdelantoPagado: number;
   saldoPendiente: number;
   puntoEmbarquePrincipal: string;
+  asientosAsignados?: number[];
+  enlaceUbicacionMaps?: string;
 }
 
 export class VoucherGenerator {
@@ -28,11 +30,14 @@ export class VoucherGenerator {
       codigoReserva,
       nombreTour,
       fechaSalida,
+      horaConcentracion,
       titularNombre,
       cotizacion,
       montoAdelantoPagado,
       saldoPendiente,
       puntoEmbarquePrincipal,
+      asientosAsignados,
+      enlaceUbicacionMaps,
     } = datos;
 
     const lineas: string[] = [];
@@ -43,7 +48,15 @@ export class VoucherGenerator {
     lineas.push(`📌 *DATOS DEL VIAJE:*`);
     lineas.push(`• *Tour:* ${nombreTour}`);
     lineas.push(`• *Fecha de Salida:* ${fechaSalida}`);
+    lineas.push(`• *Hora de Embarque:* ${horaConcentracion}`);
     lineas.push(`• *Punto de Embarque:* ${puntoEmbarquePrincipal}`);
+    if (enlaceUbicacionMaps) {
+      lineas.push(`• *Croquis / GPS Paradero:* ${enlaceUbicacionMaps}`);
+    }
+    if (asientosAsignados && asientosAsignados.length > 0) {
+      const asientosFormateados = asientosAsignados.map((a) => `#${a < 10 ? '0' + a : a}`).join(', ');
+      lineas.push(`• *Butacas Asignadas:* ${asientosFormateados}`);
+    }
     lineas.push(`• *Código de Reserva:* \`${codigoReserva}\``);
     lineas.push(``);
     lineas.push(`👥 *PASAJEROS REGISTRADOS (${cotizacion.totalPasajeros}):*`);
