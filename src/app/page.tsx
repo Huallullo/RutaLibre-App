@@ -34,7 +34,18 @@ import {
   Sparkles,
   Navigation,
   Armchair,
-  HelpCircle
+  HelpCircle,
+  BarChart3,
+  PieChart,
+  TrendingDown,
+  Target,
+  Activity,
+  Sliders,
+  Percent,
+  Zap,
+  Flame,
+  ArrowUpRight,
+  ArrowDownRight
 } from 'lucide-react';
 
 import { PricingEngine } from '@/domain/pricing-engine';
@@ -227,10 +238,17 @@ const SOLICITUDES_INICIALES: SolicitudAprobacionTC[] = [
 ];
 
 export default function DashboardPage() {
-  const [tabActiva, setTabActiva] = useState<'reservas' | 'portal_tc' | 'manifiesto' | 'liquidacion' | 'busqueda'>('reservas');
+  const [tabActiva, setTabActiva] = useState<'reservas' | 'portal_tc' | 'manifiesto' | 'liquidacion' | 'busqueda' | 'analitica'>('reservas');
   const [expediciones, setExpediciones] = useState<ExpedicionMock[]>(EXPEDICIONES_INICIALES);
   const [salidaSeleccionadaId, setSalidaSeleccionadaId] = useState<string>('exp-1');
   const [copiado, setCopiado] = useState(false);
+
+  // Estados del Simulador What-If (Sensibilidad Financiera)
+  const [simPasajeros, setSimPasajeros] = useState<number>(14);
+  const [simPrecioPasaje, setSimPrecioPasaje] = useState<number>(89);
+  const [simCostoFlete, setSimCostoFlete] = useState<number>(850);
+  const [simCostoGuia, setSimCostoGuia] = useState<number>(150);
+  const [simGastoAdicionalesPorPax, setSimGastoAdicionalesPorPax] = useState<number>(35);
 
   // Notificaciones y Aprobaciones en Tiempo Real
   const [solicitudes, setSolicitudes] = useState<SolicitudAprobacionTC[]>(SOLICITUDES_INICIALES);
@@ -631,6 +649,107 @@ export default function DashboardPage() {
     };
   }, [salidaActiva, solicitudes]);
 
+  // Cálculos Consolidados de Analítica Global para Toda la Flota
+  const analiticaConsolidada = useMemo(() => {
+    const totalCupos = expediciones.reduce((sum, e) => sum + e.capacidadTotal, 0);
+    const totalOcupados = expediciones.reduce((sum, e) => sum + e.asientosOcupados, 0);
+    const tasaOcupacion = totalCupos > 0 ? (totalOcupados / totalCupos) * 100 : 0;
+
+    const ingresosPasajes = expediciones.reduce((sum, e) => sum + e.asientosOcupados * e.precioBase, 0);
+    const ingresosAdicionalesEstimados = 1220.0;
+    const ingresosTotales = ingresosPasajes + ingresosAdicionalesEstimados;
+
+    const costosFletes = expediciones.reduce((sum, e) => sum + e.costoFleteBus, 0);
+    const costosGuias = expediciones.reduce((sum, e) => sum + e.costoGuia, 0);
+    const costosAdicionalesProv = 720.0;
+    const tasasSernanpTotal = totalOcupados * 11.0;
+    const gastosRutaAprobados = solicitudes
+      .filter((s) => s.estado === 'APROBADO' && s.monto)
+      .reduce((sum, s) => sum + (s.monto || 0), 0);
+
+    const costosTotales = costosFletes + costosGuias + costosAdicionalesProv + tasasSernanpTotal + gastosRutaAprobados;
+    const utilidadNetaTotal = ingresosTotales - costosTotales;
+    const margenNeto = ingresosTotales > 0 ? (utilidadNetaTotal / ingresosTotales) * 100 : 0;
+    const revPas = totalCupos > 0 ? ingresosTotales / totalCupos : 0;
+    const ticketPromedio = totalOcupados > 0 ? ingresosTotales / totalOcupados : 0;
+
+    // Desglose comparativo por tour
+    const desglosePorTour = expediciones.map((exp) => {
+      const ingPasajes = exp.asientosOcupados * exp.precioBase;
+      const ingExtras = exp.id === 'exp-1' ? 480 : exp.id === 'exp-2' ? 560 : 180;
+      const ingTour = ingPasajes + ingExtras;
+
+      const flete = exp.costoFleteBus;
+      const guia = exp.costoGuia;
+      const prov = exp.id === 'exp-1' ? 280 : exp.id === 'exp-2' ? 320 : 120;
+      const sernanp = exp.asientosOcupados * 11.0;
+      const gastosAprob = solicitudes
+        .filter((s) => s.expedicionId === exp.id && s.estado === 'APROBADO' && s.monto)
+        .reduce((sum, s) => sum + (s.monto || 0), 0);
+
+      const costoTour = flete + guia + prov + sernanp + gastosAprob;
+      const utilTour = ingTour - costoTour;
+      const margTour = ingTour > 0 ? (utilTour / ingTour) * 100 : 0;
+      const ocupacionPct = (exp.asientosOcupados / exp.capacidadTotal) * 100;
+
+      return {
+        id: exp.id,
+        nombre: exp.tourNombre,
+        codigo: exp.codigo,
+        ocupados: exp.asientosOcupados,
+        capacidad: exp.capacidadTotal,
+        ocupacionPct,
+        ingresos: ingTour,
+        costos: costoTour,
+        utilidad: utilTour,
+        margen: margTour,
+        esRentable: utilTour >= 0,
+      };
+    });
+
+    return {
+      totalCupos,
+      totalOcupados,
+      tasaOcupacion,
+      ingresosTotales,
+      ingresosPasajes,
+      ingresosAdicionalesEstimados,
+      costosTotales,
+      utilidadNetaTotal,
+      margenNeto,
+      revPas,
+      ticketPromedio,
+      desglosePorTour,
+    };
+  }, [expediciones, solicitudes]);
+
+  // Cálculos del Simulador What-If
+  const calculoSimulador = useMemo(() => {
+    const ingresosPasajes = simPasajeros * simPrecioPasaje;
+    const ingresosAdicionales = simPasajeros * simGastoAdicionalesPorPax;
+    const ingresosTotales = ingresosPasajes + ingresosAdicionales;
+
+    const costoVariables = simPasajeros * (simGastoAdicionalesPorPax * 0.65 + 11);
+    const costoFijos = simCostoFlete + simCostoGuia;
+    const costosTotales = costoFijos + costoVariables;
+
+    const utilidad = ingresosTotales - costosTotales;
+    const margen = ingresosTotales > 0 ? (utilidad / ingresosTotales) * 100 : 0;
+
+    const margenContribucionPorPax = (simPrecioPasaje + simGastoAdicionalesPorPax) - (simGastoAdicionalesPorPax * 0.65 + 11);
+    const breakEvenPax = margenContribucionPorPax > 0 ? Math.ceil(costoFijos / margenContribucionPorPax) : 0;
+
+    return {
+      ingresosTotales,
+      costosTotales,
+      utilidad,
+      margen,
+      breakEvenPax,
+      esRentable: utilidad >= 0,
+    };
+  }, [simPasajeros, simPrecioPasaje, simCostoFlete, simCostoGuia, simGastoAdicionalesPorPax]);
+
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-16">
       {/* Top Navbar */}
@@ -799,6 +918,17 @@ export default function DashboardPage() {
             }`}
           >
             <Search className="w-4 h-4" /> 5. Directorio Pasajeros
+          </button>
+
+          <button
+            onClick={() => setTabActiva('analitica')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              tabActiva === 'analitica'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" /> 6. Analítica & Métricas
           </button>
         </div>
       </header>
@@ -1651,6 +1781,503 @@ export default function DashboardPage() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* PESTAÑA 6: CENTRO DE INTELIGENCIA Y ANALÍTICA FINANCIERA (BI) */}
+        {/* ========================================================================= */}
+        {tabActiva === 'analitica' && (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            {/* Cabecera del Módulo Estadístico */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    Executive Analytics • Real-Time BI
+                  </span>
+                  <span className="text-xs text-slate-400">Actualizado hace 3 min</span>
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mt-1">Centro de Control Estadístico y Rendimiento de Flota</h3>
+                <p className="text-xs text-slate-500">
+                  Monitoreo de ingresos consolidados, RevPAS por asiento, ocupación de Sprinters y simulador de sensibilidad
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-colors"
+                >
+                  <Printer className="w-4 h-4" /> Exportar Informe Ejecutivo
+                </button>
+              </div>
+            </div>
+
+            {/* Tarjetas KPI Ejecutivas con Comparativa de Periodo */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* KPI 1 */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Facturación Proyectada</span>
+                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <DollarSign className="w-4 h-4" />
+                  </div>
+                </div>
+                <p className="text-2xl font-black text-slate-900">
+                  S/ {analiticaConsolidada.ingresosTotales.toFixed(2)}
+                </p>
+                <div className="flex items-center gap-1.5 mt-2 text-xs">
+                  <span className="text-emerald-700 font-bold flex items-center bg-emerald-50 px-1.5 py-0.5 rounded">
+                    <ArrowUpRight className="w-3.5 h-3.5" /> +14.2%
+                  </span>
+                  <span className="text-slate-400 text-[11px]">vs semana anterior</span>
+                </div>
+                <div className="mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
+                  <span>Pasajes: S/ {analiticaConsolidada.ingresosPasajes.toFixed(0)}</span>
+                  <span>Extras: S/ {analiticaConsolidada.ingresosAdicionalesEstimados.toFixed(0)}</span>
+                </div>
+              </div>
+
+              {/* KPI 2 */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Utilidad Neta del Fin de Semana</span>
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                    <TrendingUp className="w-4 h-4" />
+                  </div>
+                </div>
+                <p className="text-2xl font-black text-emerald-700">
+                  S/ {analiticaConsolidada.utilidadNetaTotal.toFixed(2)}
+                </p>
+                <div className="flex items-center gap-1.5 mt-2 text-xs">
+                  <span className="text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
+                    Margen Neto: {analiticaConsolidada.margenNeto.toFixed(1)}%
+                  </span>
+                  <span className="text-slate-400 text-[11px]">libre de fletes</span>
+                </div>
+                <div className="mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
+                  <span>Costos Totales:</span>
+                  <span className="font-semibold text-red-600">-S/ {analiticaConsolidada.costosTotales.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* KPI 3 */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tasa de Ocupación Flota</span>
+                  <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                    <Bus className="w-4 h-4" />
+                  </div>
+                </div>
+                <p className="text-2xl font-black text-slate-900">
+                  {analiticaConsolidada.tasaOcupacion.toFixed(1)}%
+                </p>
+                <div className="flex items-center gap-1.5 mt-2 text-xs">
+                  <span className="text-amber-800 font-bold bg-amber-50 px-1.5 py-0.5 rounded">
+                    {analiticaConsolidada.totalOcupados} / {analiticaConsolidada.totalCupos} asientos
+                  </span>
+                  <span className="text-slate-400 text-[11px]">en 3 unidades</span>
+                </div>
+                <div className="mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
+                  <span>Break-Even Min: 65%</span>
+                  <span className="text-emerald-600 font-bold">✓ Superado</span>
+                </div>
+              </div>
+
+              {/* KPI 4 */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">RevPAS & Ticket Promedio</span>
+                  <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
+                    <Target className="w-4 h-4" />
+                  </div>
+                </div>
+                <p className="text-2xl font-black text-purple-700">
+                  S/ {analiticaConsolidada.revPas.toFixed(2)}
+                </p>
+                <div className="flex items-center gap-1.5 mt-2 text-xs">
+                  <span className="text-purple-800 font-bold bg-purple-50 px-1.5 py-0.5 rounded">
+                    Ticket Prom: S/ {analiticaConsolidada.ticketPromedio.toFixed(2)}
+                  </span>
+                </div>
+                <div className="mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
+                  <span>RevPAS = Ingreso / Asiento Disponible</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Gráfico Comparativo de Rentabilidad y P&L por Tour */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-emerald-600" /> Comparativa de Rentabilidad por Destino (P&L por Tour)
+                  </h4>
+                  <p className="text-xs text-slate-500">Compara ingresos brutos, costos operativos y margen neto de cada unidad móvil</p>
+                </div>
+                <span className="text-xs text-slate-400">Valores en Soles (PEN)</span>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                {analiticaConsolidada.desglosePorTour.map((t) => (
+                  <div key={t.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-xs">{t.nombre}</span>
+                          <span className="text-[10px] font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-600 font-semibold">
+                            {t.codigo}
+                          </span>
+                          {t.id === 'exp-2' && (
+                            <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <Flame className="w-3 h-3 text-emerald-600" /> Tour Más Rentable
+                            </span>
+                          )}
+                          {t.id === 'exp-3' && (
+                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" /> A 2 cupos de Break-Even
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Ocupación: <strong>{t.ocupados} de {t.capacidad} asientos ({t.ocupacionPct.toFixed(0)}%)</strong>
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-right">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase block">Ingresos</span>
+                          <span className="font-bold text-slate-900 text-xs">S/ {t.ingresos.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase block">Costos</span>
+                          <span className="font-bold text-red-600 text-xs">-S/ {t.costos.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase block">Utilidad Neta</span>
+                          <span className={`font-black text-sm ${t.utilidad >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                            S/ {t.utilidad.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="min-w-[65px]">
+                          <span className="text-[10px] text-slate-400 uppercase block">Margen</span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full inline-block ${
+                            t.margen >= 25 ? 'bg-emerald-100 text-emerald-800' :
+                            t.margen > 0 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {t.margen.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Barra Visual Proporcional de Costos vs Utilidad */}
+                    <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden flex">
+                      <div
+                        className="bg-red-400 h-full"
+                        style={{ width: `${Math.min(100, (t.costos / t.ingresos) * 100)}%` }}
+                        title={`Costos Directos: S/ ${t.costos.toFixed(2)}`}
+                      ></div>
+                      {t.utilidad > 0 && (
+                        <div
+                          className="bg-emerald-500 h-full"
+                          style={{ width: `${(t.utilidad / t.ingresos) * 100}%` }}
+                          title={`Utilidad Neta: S/ ${t.utilidad.toFixed(2)}`}
+                        ></div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Dos Columnas: Estructura del Ingreso vs Paraderos y Métodos de Pago */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Estructura del Ingreso & Upselling */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <PieChart className="w-4 h-4 text-emerald-600" /> Composición del Ingreso y Poder del Upselling
+                </h4>
+
+                <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-900 leading-relaxed">
+                  💡 <strong>Insight Estratégico:</strong> Los servicios adicionales (canotaje, cuatrimotos y botes) representan el <strong>19.6% de los ingresos</strong> pero aportan más del <strong>42% de la utilidad líquida</strong> porque el margen de reventa con proveedores locales es superior al pasaje regular.
+                </div>
+
+                <div className="space-y-3 pt-1 text-xs">
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="font-semibold text-slate-700">Pasajes Base de Tour (Transporte + Guía)</span>
+                      <span className="font-bold text-slate-900">80.4% (S/ {analiticaConsolidada.ingresosPasajes.toFixed(2)})</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div className="bg-emerald-600 h-full w-[80.4%]"></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="font-semibold text-slate-700">Actividades Adicionales (Canotaje, Cuatrimoto, Bote)</span>
+                      <span className="font-bold text-emerald-700">19.6% (S/ {analiticaConsolidada.ingresosAdicionalesEstimados.toFixed(2)})</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div className="bg-teal-500 h-full w-[19.6%]"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase block mb-2">Top Adicionales Más Vendidos en Ruta</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                      <span className="font-bold text-slate-800 block">Paseo Ballestas</span>
+                      <span className="text-[10px] text-slate-500">18 contratados • Margen 28.6%</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                      <span className="font-bold text-slate-800 block">Cuatrimotos Lunahuaná</span>
+                      <span className="text-[10px] text-slate-500">14 contratados • Margen 33.3%</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                      <span className="font-bold text-slate-800 block">Canotaje Cañete</span>
+                      <span className="text-[10px] text-slate-500">12 contratados • Margen 30.0%</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                      <span className="font-bold text-slate-800 block">Almuerzo Campestre</span>
+                      <span className="text-[10px] text-slate-500">9 contratados • Margen 28.0%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Matriz de Paraderos y Canales de Pago */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-emerald-600" /> Demografía de Abordaje & Canales de Recaudación
+                </h4>
+
+                <div className="space-y-3 text-xs">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase block">Distribución por Punto de Encuentro en Lima</span>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-700">1. C.C. Plaza Norte (Puerta Principal)</span>
+                      <span className="font-bold text-slate-900">45.0% (18 pax)</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div className="bg-blue-600 h-full w-[45%]"></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-700">2. Calle Comercio / Javier Prado (San Borja)</span>
+                      <span className="font-bold text-slate-900">35.0% (14 pax)</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div className="bg-indigo-600 h-full w-[35%]"></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-700">3. Mall del Sur (Puente Alipio)</span>
+                      <span className="font-bold text-slate-900">20.0% (8 pax)</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div className="bg-cyan-600 h-full w-[20%]"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase block mb-2">Canales de Conciliación de Pagos</span>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
+                      <span className="font-bold text-emerald-800 text-sm block">64%</span>
+                      <span className="text-[10px] text-emerald-600 font-medium">Yape / Plin</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-200">
+                      <span className="font-bold text-blue-800 text-sm block">24%</span>
+                      <span className="text-[10px] text-blue-600 font-medium">Transf. BCP/BBVA</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                      <span className="font-bold text-amber-800 text-sm block">12%</span>
+                      <span className="text-[10px] text-amber-700 font-medium">Efectivo en Puerta</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SIMULADOR TÁCTICO INTERACTIVO: WHAT-IF SENSITIVITY SIMULATOR */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-700 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sliders className="w-5 h-5 text-emerald-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-300">
+                      Simulador Financiero What-If • Análisis de Sensibilidad
+                    </span>
+                  </div>
+                  <h4 className="text-lg font-bold mt-1">Calculadora Táctica de Punto de Equilibrio y Rentabilidad</h4>
+                  <p className="text-xs text-slate-400">
+                    Mueve los controles para simular diferentes escenarios de precio, fletes y pasajeros antes de abrir una nueva expedición
+                  </p>
+                </div>
+
+                <div className={`px-4 py-2 rounded-2xl border text-center ${
+                  calculoSimulador.esRentable 
+                    ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300' 
+                    : 'bg-red-950/80 border-red-500 text-red-300'
+                }`}>
+                  <span className="text-[10px] uppercase font-bold block">Veredicto Operativo:</span>
+                  <span className="text-sm font-black">
+                    {calculoSimulador.esRentable ? '🟢 RENTABLE (Superávit)' : '🔴 DÉFICIT (Pérdida)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Controles Deslizantes (Sliders) y Resultados */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                {/* Sliders */}
+                <div className="space-y-4 text-xs">
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-300 font-medium">Pasajeros Confirmados en la Unidad:</span>
+                      <span className="font-bold text-emerald-400 text-sm font-mono">{simPasajeros} pasajeros</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={20}
+                      value={simPasajeros}
+                      onChange={(e) => setSimPasajeros(parseInt(e.target.value) || 1)}
+                      className="w-full accent-emerald-500 cursor-pointer h-2 bg-slate-700 rounded-lg"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                      <span>1 pax</span>
+                      <span>10 pax (Punto crítico)</span>
+                      <span>20 pax (Lleno)</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-300 font-medium">Precio del Pasaje Base:</span>
+                      <span className="font-bold text-emerald-400 text-sm font-mono">S/ {simPrecioPasaje}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={49}
+                      max={160}
+                      step={5}
+                      value={simPrecioPasaje}
+                      onChange={(e) => setSimPrecioPasaje(parseInt(e.target.value) || 49)}
+                      className="w-full accent-emerald-500 cursor-pointer h-2 bg-slate-700 rounded-lg"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                      <span>S/ 49 (Promoción)</span>
+                      <span>S/ 89 (Regular)</span>
+                      <span>S/ 160 (Alta montaña)</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-300 font-medium">Costo de Flete de la Movilidad (Sprinter / H1):</span>
+                      <span className="font-bold text-red-400 text-sm font-mono">S/ {simCostoFlete}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={600}
+                      max={1500}
+                      step={50}
+                      value={simCostoFlete}
+                      onChange={(e) => setSimCostoFlete(parseInt(e.target.value) || 600)}
+                      className="w-full accent-red-500 cursor-pointer h-2 bg-slate-700 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-300 font-medium">Gasto Promedio en Adicionales por Pax (Upselling):</span>
+                      <span className="font-bold text-teal-400 text-sm font-mono">S/ {simGastoAdicionalesPorPax}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={80}
+                      step={5}
+                      value={simGastoAdicionalesPorPax}
+                      onChange={(e) => setSimGastoAdicionalesPorPax(parseInt(e.target.value) || 0)}
+                      className="w-full accent-teal-500 cursor-pointer h-2 bg-slate-700 rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                {/* Dashboard de Métricas del Simulador */}
+                <div className="bg-slate-800/90 p-6 rounded-2xl border border-slate-700 space-y-4">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block border-b border-slate-700 pb-2">
+                    Proyección Financiera en Tiempo Real
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-700">
+                      <span className="text-[10px] text-slate-400 block">Ingresos Totales:</span>
+                      <span className="text-lg font-bold text-slate-100 font-mono">
+                        S/ {calculoSimulador.ingresosTotales.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-700">
+                      <span className="text-[10px] text-slate-400 block">Costos Totales:</span>
+                      <span className="text-lg font-bold text-red-400 font-mono">
+                        S/ {calculoSimulador.costosTotales.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs text-slate-400 block">Utilidad Neta Proyectada:</span>
+                      <span className={`text-2xl font-black font-mono ${
+                        calculoSimulador.esRentable ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        S/ {calculoSimulador.utilidad.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-slate-400 block">Margen Neto:</span>
+                      <span className={`text-base font-bold font-mono ${
+                        calculoSimulador.esRentable ? 'text-emerald-300' : 'text-red-300'
+                      }`}>
+                        {calculoSimulador.margen.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-700/60 flex items-center justify-between text-xs">
+                    <span className="text-slate-300">Punto de Equilibrio (Break-Even):</span>
+                    <span className="font-bold text-amber-300 font-mono">
+                      Mínimo {calculoSimulador.breakEvenPax} pasajeros
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 leading-tight">
+                    {simPasajeros >= calculoSimulador.breakEvenPax ? (
+                      <span className="text-emerald-400">
+                        ✓ Con {simPasajeros} pasajeros superas el punto de equilibrio por {simPasajeros - calculoSimulador.breakEvenPax} cupos, asegurando ganancias netas para la empresa.
+                      </span>
+                    ) : (
+                      <span className="text-red-400">
+                        ⚠️ Alerta: Te faltan {calculoSimulador.breakEvenPax - simPasajeros} pasajeros para cubrir los costos fijos (flete y guía).
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+
           </div>
         )}
       </main>
