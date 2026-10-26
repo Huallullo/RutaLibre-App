@@ -45,20 +45,29 @@ import {
   Zap,
   Flame,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Wallet,
+  CreditCard,
+  Banknote,
+  Coins,
+  CheckSquare
 } from 'lucide-react';
 
 import { PricingEngine } from '@/domain/pricing-engine';
 import { CapacityEngine } from '@/domain/capacity-engine';
 import { PassengerValidator } from '@/domain/passenger-validator';
 import { VoucherGenerator } from '@/domain/voucher-generator';
+import { CashAndWalletEngine } from '@/domain/cash-and-wallet-engine';
 import { 
   PasajeroInput, 
   TourTarifas, 
   AdicionalItem, 
   CotizacionReservaInput,
   SolicitudAprobacionTC,
-  TipoSolicitudTC
+  TipoSolicitudTC,
+  PagoRegistro,
+  ClienteWallet,
+  MetodoPago
 } from '@/domain/types';
 
 interface ExpedicionMock {
@@ -238,10 +247,109 @@ const SOLICITUDES_INICIALES: SolicitudAprobacionTC[] = [
 ];
 
 export default function DashboardPage() {
-  const [tabActiva, setTabActiva] = useState<'reservas' | 'portal_tc' | 'manifiesto' | 'liquidacion' | 'busqueda' | 'analitica'>('reservas');
+  const [tabActiva, setTabActiva] = useState<'reservas' | 'portal_tc' | 'manifiesto' | 'liquidacion' | 'caja' | 'busqueda' | 'analitica'>('reservas');
   const [expediciones, setExpediciones] = useState<ExpedicionMock[]>(EXPEDICIONES_INICIALES);
   const [salidaSeleccionadaId, setSalidaSeleccionadaId] = useState<string>('exp-1');
   const [copiado, setCopiado] = useState(false);
+
+  // Estados para Programar Nueva Expedición
+  const [modalNuevaExpedicion, setModalNuevaExpedicion] = useState(false);
+  const [nuevoTourNombre, setNuevoTourNombre] = useState('Full Day Canta & Cordillera de la Viuda');
+  const [nuevaCategoria, setNuevaCategoria] = useState<'FULLDAY_COSTA' | 'FULLDAY_SIERRA' | 'MULTIDAY'>('FULLDAY_SIERRA');
+  const [nuevaFecha, setNuevaFecha] = useState('Domingo 03 de Noviembre');
+  const [nuevaHora, setNuevaHora] = useState('04:30 AM');
+  const [nuevaCapacidad, setNuevaCapacidad] = useState<number>(19);
+  const [nuevaPlaca, setNuevaPlaca] = useState('A8K-902 (Sprinter)');
+  const [nuevoChofer, setNuevoChofer] = useState('Pedro Alarcón');
+  const [nuevoGuia, setNuevoGuia] = useState('Renato Guzmán');
+  const [nuevoGuiaTel, setNuevoGuiaTel] = useState('954128963');
+  const [nuevoPrecioBase, setNuevoPrecioBase] = useState<number>(85.0);
+  const [nuevoFlete, setNuevoFlete] = useState<number>(850.0);
+  const [nuevoHonorarioGuia, setNuevoHonorarioGuia] = useState<number>(150.0);
+
+  // Estados de Caja y Billetera Virtual (Wallet)
+  const [pagos, setPagos] = useState<PagoRegistro[]>([
+    {
+      id: 'pago-1',
+      codigoOperacion: '984102',
+      expedicionCodigo: 'EXP-20261102-LUN-01',
+      titularNombre: 'Juan Carlos Flores',
+      monto: 100.0,
+      metodo: 'YAPE',
+      fechaHora: 'Hoy 11:20 AM',
+      conciliado: true,
+      registradoPor: 'Counter Central',
+    },
+    {
+      id: 'pago-2',
+      codigoOperacion: 'PLIN-44120',
+      expedicionCodigo: 'EXP-20261102-PAR-01',
+      titularNombre: 'Renata Morales Alva',
+      monto: 198.0,
+      metodo: 'PLIN',
+      fechaHora: 'Hoy 12:45 PM',
+      conciliado: true,
+      registradoPor: 'Counter Central',
+    },
+    {
+      id: 'pago-3',
+      codigoOperacion: 'BCP-884129',
+      expedicionCodigo: 'EXP-20261102-LUN-01',
+      titularNombre: 'Carlos Alberto Mendoza',
+      monto: 89.0,
+      metodo: 'BCP',
+      fechaHora: 'Hoy 02:15 PM',
+      conciliado: false,
+      registradoPor: 'Counter Central',
+    },
+    {
+      id: 'pago-4',
+      expedicionCodigo: 'EXP-20261102-LUN-01',
+      titularNombre: 'Gerson Huamán Vega',
+      monto: 120.0,
+      metodo: 'EFECTIVO_TC',
+      fechaHora: 'Hoy 04:30 AM',
+      conciliado: true,
+      registradoPor: 'Guía Carlos Mendoza',
+    },
+  ]);
+
+  const [wallets, setWallets] = useState<ClienteWallet[]>([
+    {
+      id: 'w-1',
+      clienteNombre: 'Diana Mendoza Castro',
+      clienteDni: '71458963',
+      clienteTelefono: '987654321',
+      saldoDisponible: 70.0,
+      motivoCredito: 'Reprogramación por lluvia en Canta del 18/Oct',
+      fechaEmision: '18/10/2026',
+      fechaExpiracion: '18/01/2027 (90 días)',
+      estado: 'ACTIVO',
+    },
+    {
+      id: 'w-2',
+      clienteNombre: 'Marco Aurelio Vega',
+      clienteDni: '42891234',
+      clienteTelefono: '912345678',
+      saldoDisponible: 120.0,
+      motivoCredito: 'Saldo a favor por cancelación médica acreditada con certificado',
+      fechaEmision: '22/10/2026',
+      fechaExpiracion: '22/01/2027 (90 días)',
+      estado: 'ACTIVO',
+    },
+  ]);
+
+  const [modalNuevoPago, setModalNuevoPago] = useState(false);
+  const [modalNuevaWallet, setModalNuevaWallet] = useState(false);
+  const [pagoTitular, setPagoTitular] = useState('');
+  const [pagoMonto, setPagoMonto] = useState<number>(50);
+  const [pagoMetodo, setPagoMetodo] = useState<MetodoPago>('YAPE');
+  const [pagoCodigoOp, setPagoCodigoOp] = useState('');
+
+  const [walletNombre, setWalletNombre] = useState('');
+  const [walletDni, setWalletDni] = useState('');
+  const [walletMonto, setWalletMonto] = useState<number>(80);
+  const [walletMotivo, setWalletMotivo] = useState('Reprogramación de viaje por fuerza mayor');
 
   // Estados del Simulador What-If (Sensibilidad Financiera)
   const [simPasajeros, setSimPasajeros] = useState<number>(14);
@@ -589,6 +697,97 @@ export default function DashboardPage() {
     alert('🚨 Solicitud enviada a la Administración. Se emitirá una notificación en pantalla.');
   };
 
+  // Crear nueva expedición programada
+  const handleCrearExpedicion = () => {
+    if (!nuevoTourNombre.trim()) {
+      alert('Por favor ingresa el nombre del tour.');
+      return;
+    }
+
+    const nueva: ExpedicionMock = {
+      id: `exp-${Date.now()}`,
+      codigo: `EXP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-GEN-0${expediciones.length + 1}`,
+      tourNombre: nuevoTourNombre,
+      categoria: nuevaCategoria,
+      fecha: nuevaFecha,
+      horaEmbarque: nuevaHora,
+      capacidadTotal: nuevaCapacidad,
+      asientosOcupados: 0,
+      chofer: nuevoChofer,
+      placa: nuevaPlaca,
+      empresaTransporte: 'Transportes Afiliados Ruta Libre',
+      soatNumero: 'SOAT-POSITIVA-ACTIVO',
+      guiaTC: nuevoGuia,
+      guiaTelefono: nuevoGuiaTel,
+      precioBase: nuevoPrecioBase,
+      precioGrupo4Mas: nuevoPrecioBase - 15,
+      precioNino: nuevoPrecioBase - 25,
+      costoFleteBus: nuevoFlete,
+      costoGuia: nuevoHonorarioGuia,
+    };
+
+    setExpediciones([nueva, ...expediciones]);
+    setSalidaSeleccionadaId(nueva.id);
+    setModalNuevaExpedicion(false);
+  };
+
+  // Conciliar pago bancario
+  const toggleConciliarPago = (pagoId: string) => {
+    setPagos((prev) =>
+      prev.map((p) => (p.id === pagoId ? { ...p, conciliado: !p.conciliado } : p))
+    );
+  };
+
+  // Registrar nuevo pago en caja
+  const handleCrearPago = () => {
+    if (!pagoTitular.trim() || pagoMonto <= 0) {
+      alert('Por favor ingresa el nombre del cliente y un monto válido.');
+      return;
+    }
+
+    const nuevo: PagoRegistro = {
+      id: `pago-${Date.now()}`,
+      codigoOperacion: pagoCodigoOp.trim() || undefined,
+      expedicionCodigo: salidaActiva.codigo,
+      titularNombre: pagoTitular,
+      monto: pagoMonto,
+      metodo: pagoMetodo,
+      fechaHora: 'Hace un momento',
+      conciliado: pagoMetodo === 'EFECTIVO_TC',
+      registradoPor: 'Abel Huallullo (Admin)',
+    };
+
+    setPagos([nuevo, ...pagos]);
+    setModalNuevoPago(false);
+    setPagoTitular('');
+    setPagoCodigoOp('');
+  };
+
+  // Emitir saldo a favor en billetera virtual (Wallet)
+  const handleCrearWallet = () => {
+    if (!walletNombre.trim() || walletMonto <= 0) {
+      alert('Por favor ingresa los datos del cliente y el monto a favor.');
+      return;
+    }
+
+    const nueva: ClienteWallet = {
+      id: `w-${Date.now()}`,
+      clienteNombre: walletNombre,
+      clienteDni: walletDni.trim() || '00000000',
+      clienteTelefono: '987654321',
+      saldoDisponible: walletMonto,
+      motivoCredito: walletMotivo,
+      fechaEmision: new Date().toLocaleDateString('es-PE'),
+      fechaExpiracion: 'Vigencia 90 días',
+      estado: 'ACTIVO',
+    };
+
+    setWallets([nueva, ...wallets]);
+    setModalNuevaWallet(false);
+    setWalletNombre('');
+    setWalletDni('');
+  };
+
   // Enviar mensaje directo de urgencia al pasajero que falta abordar
   const handleAvisarPasajeroRetrasado = (pasajero: PasajeroEnRuta) => {
     const telefono = pasajero.telefono || '987654321';
@@ -615,6 +814,11 @@ export default function DashboardPage() {
         (p.telefono && p.telefono.includes(q))
     );
   }, [pasajerosRuta, terminoBusqueda]);
+
+  // Resumen de Conciliación de Caja
+  const resumenCaja = useMemo(() => {
+    return CashAndWalletEngine.calcularResumenCaja(pagos);
+  }, [pagos]);
 
   // Cálculos Financieros P&L para la Expedición Seleccionada
   const finanzasPnl = useMemo(() => {
@@ -906,7 +1110,18 @@ export default function DashboardPage() {
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <Receipt className="w-4 h-4" /> 4. Liquidación Financiera (P&L)
+            <Receipt className="w-4 h-4" /> 4. Liquidación P&L
+          </button>
+
+          <button
+            onClick={() => setTabActiva('caja')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              tabActiva === 'caja'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Wallet className="w-4 h-4" /> 5. Caja & Billeteras
           </button>
 
           <button
@@ -917,7 +1132,7 @@ export default function DashboardPage() {
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <Search className="w-4 h-4" /> 5. Directorio Pasajeros
+            <Search className="w-4 h-4" /> 6. Directorio Pasajeros
           </button>
 
           <button
@@ -928,7 +1143,7 @@ export default function DashboardPage() {
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <BarChart3 className="w-4 h-4" /> 6. Analítica & Métricas
+            <BarChart3 className="w-4 h-4" /> 7. Analítica & Métricas
           </button>
         </div>
       </header>
@@ -977,13 +1192,20 @@ export default function DashboardPage() {
 
         {/* Selector de Expedición Activa */}
         <div>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div>
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-emerald-600" />
                 Expedición Seleccionada:
               </h2>
             </div>
+            <button
+              type="button"
+              onClick={() => setModalNuevaExpedicion(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 px-3.5 py-2 rounded-xl transition-all shadow-sm"
+            >
+              <Plus className="w-4 h-4 text-emerald-400" /> Programar Nueva Salida
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1707,7 +1929,187 @@ export default function DashboardPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* PESTAÑA 5: DIRECTORIO Y BÚSQUEDA GLOBAL DE PASAJEROS */}
+        {/* PESTAÑA 5: CAJA CHICA, CONCILIACIÓN BANCARIA Y BILLETERA VIRTUAL (WALLET) */}
+        {/* ========================================================================= */}
+        {tabActiva === 'caja' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            {/* Header del Módulo de Caja */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Tesorería & Conciliación
+                </span>
+                <h3 className="text-lg font-bold text-slate-900 mt-1 flex items-center gap-2">
+                  <Wallet className="w-5 h-5 text-emerald-600" /> Control de Caja, Yape / Plin y Billetera Virtual (Wallet)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Arqueo de ingresos en tiempo real, conciliación de depósitos bancarios y gestión de saldos a favor por cancelaciones
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setModalNuevaWallet(true)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-colors"
+                >
+                  <Coins className="w-4 h-4 text-amber-600" /> Emitir Saldo a Favor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalNuevoPago(true)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-xl transition-all shadow-sm"
+                >
+                  <Plus className="w-4 h-4" /> Registrar Pago / Abono
+                </button>
+              </div>
+            </div>
+
+            {/* Tarjetas de Arqueo de Caja */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-xs text-slate-500 font-medium block">Total Conciliado (Verificado)</span>
+                <span className="text-2xl font-black text-emerald-700 mt-1 block">
+                  S/ {resumenCaja.totalConciliado.toFixed(2)}
+                </span>
+                <span className="text-[10px] text-emerald-600 font-semibold block mt-1">✓ Verificado en cuenta bancaria</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-xs text-slate-500 font-medium block">Por Conciliar (En Revisión)</span>
+                <span className="text-2xl font-black text-amber-600 mt-1 block">
+                  S/ {resumenCaja.totalPendienteConciliar.toFixed(2)}
+                </span>
+                <span className="text-[10px] text-amber-700 block mt-1">Requiere check con app bancaria</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-xs text-slate-500 font-medium block">Recaudado vía Yape & Plin</span>
+                <span className="text-2xl font-black text-slate-900 mt-1 block">
+                  S/ {resumenCaja.totalYapePlin.toFixed(2)}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-1">Billeteras móviles</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-xs text-slate-500 font-medium block">Efectivo Cobrado en Bus (TC)</span>
+                <span className="text-2xl font-black text-slate-900 mt-1 block">
+                  S/ {resumenCaja.totalEfectivoTC.toFixed(2)}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-1">Saldos recibidos al abordar</span>
+              </div>
+            </div>
+
+            {/* Dos Columnas: Tabla de Movimientos y Billetera Virtual */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Tabla de Movimientos de Caja y Conciliación Bancaria (2 Cols) */}
+              <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-emerald-600" /> Registro de Pagos & Conciliación Bancaria
+                  </h4>
+                  <span className="text-xs text-slate-400">{pagos.length} transacciones registradas</span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
+                    <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3">Hora / Fecha</th>
+                        <th className="p-3">Titular / Cliente</th>
+                        <th className="p-3">Método</th>
+                        <th className="p-3">Código Op.</th>
+                        <th className="p-3">Monto</th>
+                        <th className="p-3 text-center">Estado</th>
+                        <th className="p-3 text-center">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {pagos.map((p) => (
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="p-3 text-slate-500 font-mono text-[11px]">{p.fechaHora}</td>
+                          <td className="p-3 font-semibold text-slate-900">
+                            {p.titularNombre}
+                            <span className="block text-[10px] text-slate-400 font-mono">{p.expedicionCodigo}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[10px]">
+                              {p.metodo}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-slate-600">{p.codigoOperacion || '-'}</td>
+                          <td className="p-3 font-mono font-bold text-slate-900">S/ {p.monto.toFixed(2)}</td>
+                          <td className="p-3 text-center">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              p.conciliado ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800 animate-pulse'
+                            }`}>
+                              {p.conciliado ? '✓ Conciliado' : 'Pendiente'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleConciliarPago(p.id)}
+                              className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-all ${
+                                p.conciliado
+                                  ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm'
+                              }`}
+                            >
+                              {p.conciliado ? 'Desmarcar' : 'Verificar'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Billetera Virtual (Wallet de Clientes) (1 Col) */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-amber-600" /> Billetera de Créditos (Wallet)
+                  </h4>
+                  <span className="text-xs text-slate-400">{wallets.length} clientes</span>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 leading-tight">
+                  📌 <strong>Regla Operativa:</strong> Las reprogramaciones por mal tiempo no se devuelven en dinero; se emiten como crédito en la billetera virtual con validez de 90 días.
+                </div>
+
+                <div className="space-y-3">
+                  {wallets.map((w) => (
+                    <div key={w.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="font-bold text-slate-900 text-xs block">{w.clienteNombre}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">DNI: {w.clienteDni} • Cel: {w.clienteTelefono}</span>
+                        </div>
+                        <span className="text-sm font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 font-mono">
+                          S/ {w.saldoDisponible.toFixed(2)}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200">
+                        {w.motivoCredito}
+                      </p>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+                        <span>Emisión: {w.fechaEmision}</span>
+                        <span className="font-semibold text-slate-600">{w.fechaExpiracion}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* PESTAÑA 6: DIRECTORIO Y BÚSQUEDA GLOBAL DE PASAJEROS */}
         {/* ========================================================================= */}
         {tabActiva === 'busqueda' && (
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6 animate-in fade-in duration-300">
@@ -2561,6 +2963,359 @@ export default function DashboardPage() {
                 className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm"
               >
                 Enviar Solicitud
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA PROGRAMAR NUEVA EXPEDICIÓN / SALIDA */}
+      {modalNuevaExpedicion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bus className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-bold text-base">Programar Nueva Expedición</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalNuevaExpedicion(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Nombre del Tour / Destino</label>
+                <input
+                  type="text"
+                  value={nuevoTourNombre}
+                  onChange={(e) => setNuevoTourNombre(e.target.value)}
+                  placeholder="Ej: Full Day Canta, Obrajillo & Cordillera"
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Categoría</label>
+                  <select
+                    value={nuevaCategoria}
+                    onChange={(e) => setNuevaCategoria(e.target.value as any)}
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="FULLDAY_COSTA">Full Day Costa (Paracas / Lunahuaná)</option>
+                    <option value="FULLDAY_SIERRA">Full Day Sierra (Canta / Churín / Raura)</option>
+                    <option value="MULTIDAY">Multidía 2D/1N (Huancaya / Oxapampa)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Capacidad Unidad Móvil</label>
+                  <select
+                    value={nuevaCapacidad}
+                    onChange={(e) => setNuevaCapacidad(parseInt(e.target.value) || 19)}
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  >
+                    <option value={11}>H1 / Minivan (11 Asientos)</option>
+                    <option value={15}>Sprinter Corta (15 Asientos)</option>
+                    <option value={19}>Sprinter Larga (19 Asientos)</option>
+                    <option value={45}>Bus Interprovincial (45 Asientos)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Fecha de Salida</label>
+                  <input
+                    type="text"
+                    value={nuevaFecha}
+                    onChange={(e) => setNuevaFecha(e.target.value)}
+                    placeholder="Ej: Domingo 03 de Noviembre"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Hora de Concentración</label>
+                  <input
+                    type="text"
+                    value={nuevaHora}
+                    onChange={(e) => setNuevaHora(e.target.value)}
+                    placeholder="Ej: 04:30 AM"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Placa & Modelo Vehículo</label>
+                  <input
+                    type="text"
+                    value={nuevaPlaca}
+                    onChange={(e) => setNuevaPlaca(e.target.value)}
+                    placeholder="Ej: A8K-902 (Sprinter)"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Chofer Designado</label>
+                  <input
+                    type="text"
+                    value={nuevoChofer}
+                    onChange={(e) => setNuevoChofer(e.target.value)}
+                    placeholder="Ej: Pedro Alarcón"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Guía Oficial (TC Líder)</label>
+                  <input
+                    type="text"
+                    value={nuevoGuia}
+                    onChange={(e) => setNuevoGuia(e.target.value)}
+                    placeholder="Ej: Renato Guzmán"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Celular del Guía</label>
+                  <input
+                    type="text"
+                    value={nuevoGuiaTel}
+                    onChange={(e) => setNuevoGuiaTel(e.target.value)}
+                    placeholder="Ej: 954128963"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">Precio Pasaje (S/)</label>
+                  <input
+                    type="number"
+                    value={nuevoPrecioBase}
+                    onChange={(e) => setNuevoPrecioBase(parseFloat(e.target.value) || 0)}
+                    className="w-full text-xs p-2 rounded-lg border border-slate-300 font-bold text-emerald-700 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">Flete Bus (S/)</label>
+                  <input
+                    type="number"
+                    value={nuevoFlete}
+                    onChange={(e) => setNuevoFlete(parseFloat(e.target.value) || 0)}
+                    className="w-full text-xs p-2 rounded-lg border border-slate-300 font-bold text-red-600 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">Honorario Guía (S/)</label>
+                  <input
+                    type="number"
+                    value={nuevoHonorarioGuia}
+                    onChange={(e) => setNuevoHonorarioGuia(parseFloat(e.target.value) || 0)}
+                    className="w-full text-xs p-2 rounded-lg border border-slate-300 font-bold text-slate-800 bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setModalNuevaExpedicion(false)}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 px-4 py-2"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCrearExpedicion}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Guardar y Programar Salida
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA REGISTRAR PAGO DIRECTO EN CAJA */}
+      {modalNuevoPago && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="bg-emerald-600 text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-white" />
+                <h3 className="font-bold text-base">Registrar Pago / Abono</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalNuevoPago(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Nombre del Cliente / Titular</label>
+                <input
+                  type="text"
+                  value={pagoTitular}
+                  onChange={(e) => setPagoTitular(e.target.value)}
+                  placeholder="Ej: Gabriela Torres Soto"
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Método de Pago</label>
+                  <select
+                    value={pagoMetodo}
+                    onChange={(e) => setPagoMetodo(e.target.value as MetodoPago)}
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  >
+                    <option value="YAPE">Yape (Móvil)</option>
+                    <option value="PLIN">Plin (Móvil)</option>
+                    <option value="BCP">Banco BCP</option>
+                    <option value="BBVA">Banco BBVA</option>
+                    <option value="INTERBANK">Banco Interbank</option>
+                    <option value="EFECTIVO_TC">Efectivo en Puerta con TC</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Monto Depositado (S/)</label>
+                  <input
+                    type="number"
+                    value={pagoMonto}
+                    onChange={(e) => setPagoMonto(parseFloat(e.target.value) || 0)}
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-black text-emerald-700"
+                  />
+                </div>
+              </div>
+
+              {pagoMetodo !== 'EFECTIVO_TC' && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Código de Operación Bancaria</label>
+                  <input
+                    type="text"
+                    value={pagoCodigoOp}
+                    onChange={(e) => setPagoCodigoOp(e.target.value)}
+                    placeholder="Ej: 948123 (6 dígitos del voucher)"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setModalNuevoPago(false)}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 px-4 py-2"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCrearPago}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-md"
+              >
+                Registrar Pago
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA EMITIR SALDO EN BILLETERA VIRTUAL (WALLET) */}
+      {modalNuevaWallet && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="bg-amber-600 text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Coins className="w-5 h-5 text-white" />
+                <h3 className="font-bold text-base">Emitir Saldo en Billetera Virtual</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalNuevaWallet(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Nombre Completo del Cliente</label>
+                <input
+                  type="text"
+                  value={walletNombre}
+                  onChange={(e) => setWalletNombre(e.target.value)}
+                  placeholder="Ej: Diana Mendoza Castro"
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">DNI del Cliente</label>
+                  <input
+                    type="text"
+                    value={walletDni}
+                    onChange={(e) => setWalletDni(e.target.value)}
+                    placeholder="Ej: 71458963"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Monto a Favor (S/)</label>
+                  <input
+                    type="number"
+                    value={walletMonto}
+                    onChange={(e) => setWalletMonto(parseFloat(e.target.value) || 0)}
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500 font-black text-emerald-700"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Motivo / Justificación del Crédito</label>
+                <textarea
+                  value={walletMotivo}
+                  onChange={(e) => setWalletMotivo(e.target.value)}
+                  rows={3}
+                  placeholder="Ej: Reprogramación autorizada por mal tiempo climático en Canta..."
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setModalNuevaWallet(false)}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 px-4 py-2"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCrearWallet}
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-md"
+              >
+                Generar Crédito en Billetera
               </button>
             </div>
           </div>

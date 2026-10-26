@@ -119,3 +119,31 @@ export interface SolicitudAprobacionTC {
   observacionAdmin?: string;
 }
 
+export type MetodoPago = 'YAPE' | 'PLIN' | 'BCP' | 'BBVA' | 'INTERBANK' | 'EFECTIVO_TC' | 'WALLET_SALDO';
+
+export interface PagoRegistro {
+  id: string;
+  codigoOperacion?: string;
+  expedicionCodigo: string;
+  titularNombre: string;
+  monto: number;
+  metodo: MetodoPago;
+  fechaHora: string;
+  conciliado: boolean;
+  registradoPor: string;
+  observaciones?: string;
+}
+
+export interface ClienteWallet {
+  id: string;
+  clienteNombre: string;
+  clienteDni: string;
+  clienteTelefono: string;
+  saldoDisponible: number;
+  motivoCredito: string;
+  fechaEmision: string;
+  fechaExpiracion: string;
+  estado: 'ACTIVO' | 'UTILIZADO' | 'VENCIDO';
+}
+
+
